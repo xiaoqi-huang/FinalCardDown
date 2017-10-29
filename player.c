@@ -3,11 +3,13 @@
 //2017-10-24
 //Yingzhi Zhou (z5125679)
 
+#include <stdio.h>
+#include <stdlib.h>
+
 #include "Game.h"
 #include "player.h"
 #include "Card.h"
-#include <stdio.h>
-#include <stdlib.h>
+
 #define NOT_FOUND -1
 
 #define callOutTRIO 3
