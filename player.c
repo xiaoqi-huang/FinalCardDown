@@ -24,6 +24,7 @@ static int haveDrawnCard(Game game);
 static int havePlayedCard(Game game);
 static int canPlayCard (Game game);
 static Card decideCard (Game game);
+static Card decideFirstCard (Game game);
 
 playerMove decideMove(Game game) {
     playerMove move;
@@ -31,16 +32,26 @@ playerMove decideMove(Game game) {
     int flag = 0;
 
     // Start out by making a move struct, to say what our move is.
-    // Check if the last player said UNO, DUO or TRIO
-    int callOutValue = callOut(game);
-    if (callOutValue == callOutUNO) {
-        move.action = SAY_UNO;
-        flag = 1;
-    } else if (callOutValue == callOutDUO) {
-        move.action = SAY_DUO;
-        flag = 1;
-    } else if (callOutValue == callOutTRIO) {
-        move.action = SAY_TRIO;
+    // If the player is the first player, do not call out
+    // Otherwise, Check if the last player said UNO, DUO or TRIO
+    if (numTurns(game) != 1) {
+        int callOutValue = callOut(game);
+        if (callOutValue == callOutUNO) {
+            move.action = SAY_UNO;
+            flag = 1;
+        } else if (callOutValue == callOutDUO) {
+            move.action = SAY_DUO;
+            flag = 1;
+        } else if (callOutValue == callOutTRIO) {
+            move.action = SAY_TRIO;
+            flag = 1;
+        }
+    }
+
+    // The first move in a game must be PLAY_CARD
+    if (numTurns(game) == 1 && turnMoves(game, currentTurn(game)) == 0) {
+        move.action = PLAY_CARD;
+        move.card = decideFirstCard(game);
         flag = 1;
     }
 
@@ -48,23 +59,34 @@ playerMove decideMove(Game game) {
     // Determine whether the player can currently draw a card.
     // If they can't draw a card, they should probably end their turn.
     if (flag == 0 && noMatchingCard(game)) {
-        if (turnMoves(game, currentTurn(game)) == 1) {
+        // DRAW_CARD --> END_TURN
+        if (turnMoves(game, currentTurn(game)) == 0) {
             move.action = DRAW_CARD;
             flag = 1;
-        } else if (turnMoves(game, currentTurn(game)) == 2) {
+        } else if (turnMoves(game, currentTurn(game)) == 1) {
             playerMove lastMove = pastMove(game, currentTurn(game), 0);
-            if (lastMove.action == SAY_UNO || lastMove.action == SAY_DUO || lastMove.action == SAY_TRIO) {
+            // CALL OUT --> DRAW_CARD
+            if (lastMove.action == SAY_UNO
+                || lastMove.action == SAY_DUO
+                || lastMove.action == SAY_TRIO) {
                 move.action = DRAW_CARD;
                 flag = 1;
-            } else if (lastMove.action == DRAW_CARD && cardValue(topDiscard(game) == DRAW_TWO)) {
+            // DRAW_CARD --> DRAW_CARD
+            } else if (lastMove.action == DRAW_CARD
+                && cardValue(topDiscard(game) == DRAW_TWO)) {
                 move.action = DRAW_CARD;
                 flag = 1;
             }
-        } else if (turnMoves(game, currentTurn(game)) == 3) {
+        } else if (turnMoves(game, currentTurn(game)) == 2) {
+            // CALL OUT --> DRAW_CARD --> DRAW_CARD
             if (cardValue(topDiscard(game)) == DRAW_TWO) {
                 playerMove firstMove = pastMove(game, currentTurn(game), 0);
                 playerMove secondMove = pastMove(game, currentTurn(game), 1);
-                if ((firstMove.action == SAY_UNO || firstMove.action == SAY_DUO || firstMove.action == SAY_TRIO) && secondMove.action == DRAW_CARD && cardValue(topDiscard(game)) == DRAW_TWO){
+                if ((firstMove.action == SAY_UNO
+                    || firstMove.action == SAY_DUO
+                    || firstMove.action == SAY_TRIO)
+                    && secondMove.action == DRAW_CARD
+                    && cardValue(topDiscard(game)) == DRAW_TWO){
                     move.action = DRAW_CARD;
                     flag = 1;
                 }
@@ -86,6 +108,8 @@ playerMove decideMove(Game game) {
         flag = 1;
     }
 
+    // If the player has valid cards to play,
+    // Choose one
     if (flag == 0 && canPlayCard(game)) {
         move.action = PLAY_CARD;
         move.card = decideCard(game);
@@ -98,24 +122,30 @@ playerMove decideMove(Game game) {
 /* *****************************************************************************
  * Helper function
  * ***************************************************************************** */
-//check if the last player call out
-//if no, return TRUE
-//if he/she does, return FALSE;
+
+// If the last player called out, return FALSE;
+// Otherwise, check the number of the cards of the last player
 static int callOut(Game game) {
     int callOutValue = 0;
 
-    playerMove secondLastMove = pastMove(game, currentTurn(game) - 1, turnMoves(game, currentTurn(game) - 1) - 1);
-    if (secondLastMove.action != SAY_UNO && secondLastMove.action != SAY_DUO && secondLastMove.action != SAY_TRIO) {
+    int turnIndex = currentTurn(game) - 1;
+    int moveIndex = turnMoves(game, turnIndex) - 2;
+    playerMove secondLastMove = pastMove(game, lastTurn, moveIndex);
+    if (secondLastMove.action != SAY_UNO
+        && secondLastMove.action != SAY_DUO
+        && secondLastMove.action != SAY_TRIO) {
         // Find the lastPlayer
         int lastPlayer;
         if (playDirection (game) == CLOCKWISE) {
-            if (secondLastMove.action == PLAY_CARD && cardValue(topDiscard(game)) == ADVANCE) {
+            if (secondLastMove.action == PLAY_CARD
+                && cardValue(topDiscard(game)) == ADVANCE) {
                 lastPlayer = (currentPlayer (game) - 2) % 4;
             } else {
                 lastPlayer = (currentPlayer (game) - 1) % 4;
             }
         } else {
-            if (secondLastMove.action == PLAY_CARD && cardValue(topDiscard(game)) == ADVANCE) {
+            if (secondLastMove.action == PLAY_CARD
+                && cardValue(topDiscard(game)) == ADVANCE) {
                 lastPlayer = (currentPlayer (game) + 2) % 4;
             } else {
                 lastPlayer = (currentPlayer (game) + 1) % 4;
@@ -134,8 +164,7 @@ static int callOut(Game game) {
 }
 
 
-// Determine whether the player can currently draw a card.
-// If they can't draw a card, they should probably end their turn.
+// Check whether the player does not have valid cards
 static int noMatchingCard (Game game) {
     int noMatching = TRUE;
 
@@ -147,7 +176,9 @@ static int noMatchingCard (Game game) {
     Card curr = NULL;
     while (i < playerCardCount(game, currentPlayer(game))) {
         curr = handCard(game, i);
-        if (cardValue(curr) == suit || cardValue(curr) == color || cardValue(curr) == value) {
+        if (cardValue(curr) == suit
+            || cardValue(curr) == color
+            || cardValue(curr) == value) {
             noMatching = FALSE;
             break;
         }
@@ -156,6 +187,7 @@ static int noMatchingCard (Game game) {
     return noMatching;
 }
 
+// Check whether the player has valid cards
 static int haveMatchingCard (Game game) {
     int matching = TRUE;
     if (noMatchingCard(game)) {
@@ -209,6 +241,7 @@ static int shouldSayTRIO (Game game) {
     return shouldSay;
 }
 
+// Check whether the current player has drawn a card in the current turn
 static int haveDrawnCard(Game game) {
     int drawn = FALSE;
     int numOfMoves = turnMoves(game, currentTurn(game));
@@ -226,6 +259,7 @@ static int haveDrawnCard(Game game) {
     return drawn;
 }
 
+// Check whether the current player has played a card in the current turn
 static int havePlayedCard(Game game) {
     int played = FALSE;
     int numOfMoves = turnMoves(game, currentTurn(game));
@@ -243,12 +277,13 @@ static int havePlayedCard(Game game) {
     return played;
 }
 
+// Check whether the current player can play a card
 static int canPlayCard (Game game) {
     int canPlay = TRUE;
     if (haveDrawnCard(game)) {
         canPlay = FALSE;
     } else {
-        if (havePlayedCard(Game game) && cardValue(topDiscard(game)) != CONTINUE) {
+        if (havePlayedCard(game) && cardValue(topDiscard(game)) != CONTINUE) {
             canPlay = FALSE;
         } else if (noMatchingCard(game)) {
             canPlay = FALSE;
@@ -257,19 +292,23 @@ static int canPlayCard (Game game) {
     return canPlay;
 }
 
+// Decide the best card to play
+// CONTINUE -> DRAW_TWO -> the larger value
 static Card decideCard (Game game) {
     value suit = cardSuit(topDiscard(game));
     value color = cardColor(topDiscard(game));
     value value = cardValue(topDiscard(game));
 
     int index = -1;
-    value max = -1;
+    int max = -1;
 
     int i = 0;
     Card curr = NULL;
     while (i < playerCardCount(game, currentPlayer(game))) {
         curr = handCard(game, i);
-        if (cardValue(curr) == suit || cardValue(curr) == color || cardValue(curr) == value) {
+        if (cardValue(curr) == suit
+            || cardValue(curr) == color
+            || cardValue(curr) == value) {
             if (cardValue(curr) == CONTINUE) {
                 index = i;
                 break;
@@ -281,6 +320,32 @@ static Card decideCard (Game game) {
             if (cardValue(curr) >= max) {
                 index = i;
             }
+        }
+        i++;
+    }
+    return handCard(game, index);
+}
+
+// Decide the best card to play in the first in a game
+// CONTINUE -> DRAW_TWO -> the larger value
+static Card decideFirstCard (Game game) {
+    int index = -1;
+    int max = -1;
+
+    int i = 0;
+    Card curr = NULL;
+    while (i < playerCardCount(game, currentPlayer(game))) {
+        curr = handCard(game, i);
+        if (cardValue(curr) == CONTINUE) {
+            index = i;
+            break;
+        }
+        if (cardValue(curr) == DRAW_TWO) {
+            index = i;
+            break;
+        }
+        if (cardValue(curr) >= max) {
+            index = i;
         }
         i++;
     }
